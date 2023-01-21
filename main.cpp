@@ -2,6 +2,14 @@
 // ecd_sample_prep  
 //
 // Author: Doug Wolf
+//
+// Command line options:
+//
+//   -config <filename>    : specifies the name of a configuration file
+//
+//   -trace <cell_number>  : instead of creating an output file, traces a cell in an existing 
+//                           file.
+//                        
 //=================================================================================================
 
 #include <unistd.h>
@@ -20,7 +28,7 @@
 
 using namespace std;
 
-void     execute();
+void     execute(const char** argv);
 void     loadFragments();
 void     loadDistribution();
 uint32_t findLongestSequence();
@@ -28,7 +36,7 @@ uint32_t verifyDistributionIsValid();
 void     writeOutputFile(uint32_t frameGroupCount);
 void     parseCommandLine(const char** argv);
 void     trace(uint32_t cellNumber);
-void     readConfigurationFile();
+void     readConfigurationFile(string filename);
 
 // Define a convenient type to encapsulate a vector of strings
 typedef vector<string> strvec_t;
@@ -44,12 +52,18 @@ struct distribution_t
 };
 vector<distribution_t> distributionList;
 
-
+//=================================================================================================
+// Command line options
+//=================================================================================================
 struct cmdline_t
 {
     bool     trace;
     uint32_t cellNumber;
+    string   config;
+
 } cmdLine;
+//=================================================================================================
+
 
 //=================================================================================================
 // Variable names in this structure should exactly match the configuration file
@@ -76,18 +90,14 @@ struct config_t
 //=================================================================================================
 int main(int argc, const char** argv)
 {
-    // Parse the command line
-    parseCommandLine(argv);
-
     try
     {
-        execute();
+        execute(argv);
     }
     catch(const std::exception& e)
     {
         cerr << e.what() << '\n';
     }
-
 }
 //=================================================================================================
 
@@ -121,13 +131,24 @@ void parseCommandLine(const char** argv)
         // Fetch this parameter
         string token = argv[i];
 
+        // Handle the "-trace" command line switch
         if (token == "-trace")
         {
             cmdLine.trace = true;
             if (argv[i+1])
-            {
                 cmdLine.cellNumber = atoi(argv[++i]);                
-            }
+            else
+                throwRuntime("Missing parameter on -trace");                
+            continue;
+        }
+
+        // Handle the "-config" command line switch
+        if (token == "-config")
+        {
+            if (argv[i+1])
+                cmdLine.config = argv[++i];
+            else
+                throwRuntime("Missing parameter on -config");
             continue;
         }
 
@@ -143,13 +164,16 @@ void parseCommandLine(const char** argv)
 //=================================================================================================
 // execute() - Top level code for program logic
 //=================================================================================================
-void execute()
+void execute(const char** argv)
 {
     // Ensure that comma-separators get printed for numbers
     setlocale(LC_ALL, "");
 
+    // Parse the command line
+    parseCommandLine(argv);
+
     // Fetch the configuration values from the file and populate the global "config" structure
-    readConfigurationFile();
+    readConfigurationFile(cmdLine.config);
 
     // If we're supposed to trace a single cell, make it so
     if (cmdLine.trace)
@@ -244,7 +268,6 @@ void loadFragments()
     char fragmentName[1000], buffer[1000];
     vector<int> v;
     string line;
-
 
     // Fetch the filename of the fragment definiton file
     const char* filename = config.fragment_file.c_str();
@@ -595,11 +618,15 @@ void trace(uint32_t cellNumber)
 // readConfigurationFile() - Reads in the configuration file and populates the global "config"
 //                           structure.
 //=================================================================================================
-void readConfigurationFile()
+void readConfigurationFile(string filename)
 {
     CConfigFile cf;
 
+    // Declare a default filename
     const char* cfilename = "ecd_sample_prep.conf";
+
+    // If the filename passed by the caller isn't blank, that's our filename
+    if (!filename.empty()) cfilename = filename.c_str();
 
     // Read and parse the configuration file and complain if we can't
     if (!cf.read(cfilename, false)) throwRuntime("Can't read %s", cfilename);
@@ -614,9 +641,5 @@ void readConfigurationFile()
     cf.get("fragment_file",       &config.fragment_file      );
     cf.get("distribution_file",   &config.distribution_file  );
     cf.get("output_file",         &config.output_file        );
-
-    printf("cells_per_frame = %d\n", config.cells_per_frame);
-    printf("contig_size     = %ld\n", config.contig_size);
-    printf("quiescent       = %d\n", config.quiescent);        
 }
 //=================================================================================================
