@@ -76,16 +76,6 @@ struct config_t
 //=================================================================================================
 int main(int argc, const char** argv)
 {
-    config.cells_per_frame     = 16;
-    config.contig_size         = config.cells_per_frame * 1000;
-    config.diagnostic_frames   = 3;
-    config.diagnostic_constant = 255;
-    config.data_frames         = 13;
-    config.quiescent           = 170;
-    config.fragment_file       = "fragments.csv";
-    config.distribution_file   = "distribution.csv";
-    config.output_file         = "output.dat";
-
     // Parse the command line
     parseCommandLine(argv);
 
@@ -620,25 +610,13 @@ void readConfigurationFile()
     cf.get("diagnostic_frames",   &config.diagnostic_frames  );
     cf.get("data_frames",         &config.data_frames        );
     cf.get("diagnostic_constant", &config.diagnostic_constant);
+    cf.get("quiescent",           &config.quiescent          );
+    cf.get("fragment_file",       &config.fragment_file      );
+    cf.get("distribution_file",   &config.distribution_file  );
+    cf.get("output_file",         &config.output_file        );
 
-
+    printf("cells_per_frame = %d\n", config.cells_per_frame);
+    printf("contig_size     = %ld\n", config.contig_size);
+    printf("quiescent       = %d\n", config.quiescent);        
 }
 //=================================================================================================
-
-#if 0
-cells_per_frame = 16;
-contig_size = 9663676416
-
-diagnostic_frames = 3;
-data_frames       = 13;
-
-diagnostic_constant = 255;
-
-quiescent = 170;
-
-fragment_file = "fragments.csv";
-
-distribution_file = "distribution.csv";
-
-output_file = "output.dat";
-#endif
