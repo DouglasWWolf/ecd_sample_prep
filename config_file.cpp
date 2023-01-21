@@ -11,7 +11,10 @@ using namespace std;
 
 static double s_to_d(const string& s)  {return strtod(s.c_str(), NULL   );}
 
-static int s_to_i(const string& s)
+//==========================================================================================================
+// s_to_si() - Converts a string to a 64-bit signed integer
+//==========================================================================================================
+static int64_t s_to_si(const string& s)
 {
     char buffer[100], *out = buffer;
     int remaining = sizeof(buffer) - 1;
@@ -28,6 +31,31 @@ static int s_to_i(const string& s)
     *out = 0;
     return strtol(buffer, NULL, 0);
 }
+//==========================================================================================================
+
+
+//==========================================================================================================
+// s_to_ui() - Converts a string to a 64-bit unsigned integer
+//==========================================================================================================
+static uint64_t s_to_ui(const string& s)
+{
+    char buffer[100], *out = buffer;
+    int remaining = sizeof(buffer) - 1;
+    const char* in = s.c_str();
+    while (*in && remaining)
+    {
+        if (*in != '_')
+        {
+            *out++ = *in;
+            --remaining;
+        }
+        ++in;
+    }
+    *out = 0;
+    return strtoul(buffer, NULL, 0);
+}
+//==========================================================================================================
+
 
 static CTokenizer tokenizer;
 
@@ -73,10 +101,15 @@ static bool parse_bool(const char* in)
 //==========================================================================================================
 // decode() - Converts a std::string into some other type
 //==========================================================================================================
-static void decode(const string& s, int32_t *p_result) {*p_result = (int32_t)s_to_i(s);}
-static void decode(const string& s, double  *p_result) {*p_result = s_to_d(s);}
-static void decode(const string& s, string  *p_result) {*p_result = s;}
-static void decode(const string& s, bool    *p_result) {*p_result = parse_bool(s.c_str());}
+static void decode(const string& s, int8_t   *p_result) {*p_result = (int8_t ) s_to_si(s);}
+static void decode(const string& s, int32_t  *p_result) {*p_result = (int32_t) s_to_si(s);}
+static void decode(const string& s, int64_t  *p_result) {*p_result = (int64_t) s_to_si(s);}
+static void decode(const string& s, uint8_t  *p_result) {*p_result = (uint8_t )s_to_ui(s);}
+static void decode(const string& s, uint32_t *p_result) {*p_result = (uint32_t)s_to_ui(s);}
+static void decode(const string& s, uint64_t *p_result) {*p_result = (uint64_t)s_to_ui(s);}
+static void decode(const string& s, double   *p_result) {*p_result = s_to_d(s);}
+static void decode(const string& s, string   *p_result) {*p_result = s;}
+static void decode(const string& s, bool     *p_result) {*p_result = parse_bool(s.c_str());}
 //==========================================================================================================
 
 
@@ -387,7 +420,22 @@ bool CConfigFile::get(string key, string fmt, void* p1, void* p2, void* p3, void
         // Parse this value into the appropriate data type in the caller's output field 
         switch(format)
         {
+            case 't':   decode(value, (int8_t*)field);
+                        break;
+
+            case 'T':   decode(value, (uint8_t*)field);
+                        break;
+
             case 'i':   decode(value, (int32_t*)field);
+                        break;
+
+            case 'I':   decode(value, (uint32_t*)field);
+                        break;
+
+            case 'l':   decode(value, (int64_t*)field);
+                        break;
+
+            case 'L':   decode(value, (uint64_t*)field);
                         break;
 
             case 'f':   decode(value, (double*)field);
@@ -414,13 +462,43 @@ bool CConfigFile::get(string key, string fmt, void* p1, void* p2, void* p3, void
 //
 // If key doesn't exist in our map, these either return false, or throw a std::runtime_error
 //==========================================================================================================
+
+bool CConfigFile::get(string key, int8_t* p1, int8_t* p2, int8_t* p3, int8_t* p4, int8_t* p5,
+                                  int8_t* p6, int8_t* p7, int8_t* p8, int8_t* p9)
+{
+    return get(key, "t", p1, p2, p3, p4, p5, p6, p7, p8, p9);
+}
+
+bool CConfigFile::get(string key, uint8_t* p1, uint8_t* p2, uint8_t* p3, uint8_t* p4, uint8_t* p5,
+                                  uint8_t* p6, uint8_t* p7, uint8_t* p8, uint8_t* p9)
+{
+    return get(key, "T", p1, p2, p3, p4, p5, p6, p7, p8, p9);
+}
+
 bool CConfigFile::get(string key, int32_t* p1, int32_t* p2, int32_t* p3, int32_t* p4, int32_t* p5,
                                   int32_t* p6, int32_t* p7, int32_t* p8, int32_t* p9)
 {
     return get(key, "i", p1, p2, p3, p4, p5, p6, p7, p8, p9);
 }
 
+bool CConfigFile::get(string key, uint32_t* p1, uint32_t* p2, uint32_t* p3, uint32_t* p4, uint32_t* p5,
+                                  uint32_t* p6, uint32_t* p7, uint32_t* p8, uint32_t* p9)
+{
+    return get(key, "I", p1, p2, p3, p4, p5, p6, p7, p8, p9);
+}
 
+
+bool CConfigFile::get(string key, int64_t* p1, int64_t* p2, int64_t* p3, int64_t* p4, int64_t* p5,
+                                  int64_t* p6, int64_t* p7, int64_t* p8, int64_t* p9)
+{
+    return get(key, "l", p1, p2, p3, p4, p5, p6, p7, p8, p9);
+}
+
+bool CConfigFile::get(string key, uint64_t* p1, uint64_t* p2, uint64_t* p3, uint64_t* p4, uint64_t* p5,
+                                  uint64_t* p6, uint64_t* p7, uint64_t* p8, uint64_t* p9)
+{
+    return get(key, "L", p1, p2, p3, p4, p5, p6, p7, p8, p9);
+}
 
 bool CConfigFile::get(string key, double* p1, double* p2, double* p3, double* p4, double* p5,
                                   double* p6, double* p7, double* p8, double* p9)

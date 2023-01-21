@@ -16,6 +16,7 @@
 #include <map>
 #include <vector>
 #include <fstream>
+#include "config_file.h"
 
 using namespace std;
 
@@ -27,6 +28,7 @@ uint32_t verifyDistributionIsValid();
 void     writeOutputFile(uint32_t frameGroupCount);
 void     parseCommandLine(const char** argv);
 void     trace(uint32_t cellNumber);
+void     readConfigurationFile();
 
 // Define a convenient type to encapsulate a vector of strings
 typedef vector<string> strvec_t;
@@ -155,6 +157,9 @@ void execute()
 {
     // Ensure that comma-separators get printed for numbers
     setlocale(LC_ALL, "");
+
+    // Fetch the configuration values from the file and populate the global "config" structure
+    readConfigurationFile();
 
     // If we're supposed to trace a single cell, make it so
     if (cmdLine.trace)
@@ -594,3 +599,46 @@ void trace(uint32_t cellNumber)
     printf("\n");
 }
 //=================================================================================================
+
+
+//=================================================================================================
+// readConfigurationFile() - Reads in the configuration file and populates the global "config"
+//                           structure.
+//=================================================================================================
+void readConfigurationFile()
+{
+    CConfigFile cf;
+
+    const char* cfilename = "ecd_sample_prep.conf";
+
+    // Read and parse the configuration file and complain if we can't
+    if (!cf.read(cfilename, false)) throwRuntime("Can't read %s", cfilename);
+
+    // Fetch each configuration
+    cf.get("cells_per_frame",     &config.cells_per_frame    );
+    cf.get("contig_size",         &config.contig_size        );
+    cf.get("diagnostic_frames",   &config.diagnostic_frames  );
+    cf.get("data_frames",         &config.data_frames        );
+    cf.get("diagnostic_constant", &config.diagnostic_constant);
+
+
+}
+//=================================================================================================
+
+#if 0
+cells_per_frame = 16;
+contig_size = 9663676416
+
+diagnostic_frames = 3;
+data_frames       = 13;
+
+diagnostic_constant = 255;
+
+quiescent = 170;
+
+fragment_file = "fragments.csv";
+
+distribution_file = "distribution.csv";
+
+output_file = "output.dat";
+#endif

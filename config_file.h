@@ -72,11 +72,42 @@ public:
                                                 , void* p4=NULL, void* p5=NULL, void* p6=NULL
                                                 , void* p7=NULL, void* p8=NULL, void* p9=NULL);
 
-    // Call this to fetch integers.
+    // Call this to fetch signed 8-bit integers.
+    // Can throw exception runtime_error
+    bool    get(std::string key, int8_t* p1=NULL, int8_t* p2=NULL, int8_t* p3=NULL
+                               , int8_t* p4=NULL, int8_t* p5=NULL, int8_t* p6=NULL
+                               , int8_t* p7=NULL, int8_t* p8=NULL, int8_t* p9=NULL);
+
+    // Call this to fetch unsigned 8-bit integers.
+    // Can throw exception runtime_error
+    bool    get(std::string key, uint8_t* p1=NULL, uint8_t* p2=NULL, uint8_t* p3=NULL
+                               , uint8_t* p4=NULL, uint8_t* p5=NULL, uint8_t* p6=NULL
+                               , uint8_t* p7=NULL, uint8_t* p8=NULL, uint8_t* p9=NULL);
+
+    // Call this to fetch signed 32-bit integers.
     // Can throw exception runtime_error
     bool    get(std::string key, int32_t* p1=NULL, int32_t* p2=NULL, int32_t* p3=NULL
                                , int32_t* p4=NULL, int32_t* p5=NULL, int32_t* p6=NULL
                                , int32_t* p7=NULL, int32_t* p8=NULL, int32_t* p9=NULL);
+
+    // Call this to fetch unsigned 32-bit integers.
+    // Can throw exception runtime_error
+    bool    get(std::string key, uint32_t* p1=NULL, uint32_t* p2=NULL, uint32_t* p3=NULL
+                               , uint32_t* p4=NULL, uint32_t* p5=NULL, uint32_t* p6=NULL
+                               , uint32_t* p7=NULL, uint32_t* p8=NULL, uint32_t* p9=NULL);
+
+
+    // Call this to fetch signed 64-bit integers.
+    // Can throw exception runtime_error
+    bool    get(std::string key, int64_t* p1=NULL, int64_t* p2=NULL, int64_t* p3=NULL
+                               , int64_t* p4=NULL, int64_t* p5=NULL, int64_t* p6=NULL
+                               , int64_t* p7=NULL, int64_t* p8=NULL, int64_t* p9=NULL);
+
+    // Call this to fetch unsigned 64-bit integers.
+    // Can throw exception runtime_error
+    bool    get(std::string key, uint64_t* p1=NULL, uint64_t* p2=NULL, uint64_t* p3=NULL
+                               , uint64_t* p4=NULL, uint64_t* p5=NULL, uint64_t* p6=NULL
+                               , uint64_t* p7=NULL, uint64_t* p8=NULL, uint64_t* p9=NULL);
 
     // Call this to fetch doubles
     // Can throw exception runtime_error
