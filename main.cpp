@@ -25,6 +25,7 @@ void     loadDistribution();
 uint32_t findLongestSequence();
 uint32_t verifyDistributionIsValid();
 void     writeOutputFile(uint32_t frameGroupCount);
+void     parseCommandLine(const char** argv);
 
 // Define a convenient type to encapsulate a vector of strings
 typedef vector<string> strvec_t;
@@ -40,6 +41,12 @@ struct distribution_t
 };
 vector<distribution_t> distributionList;
 
+
+struct cmdline_t
+{
+    bool     trace;
+    uint32_t cellNumber;
+} cmdLine;
 
 //=================================================================================================
 // Variable names in this structure should exactly match the configuration file
@@ -64,7 +71,7 @@ struct config_t
 //=================================================================================================
 // main() - Execution starts here.
 //=================================================================================================
-int main()
+int main(int argc, const char** argv)
 {
     config.cells_per_frame     = 16;
     config.contig_size         = config.cells_per_frame * 1000;
@@ -75,6 +82,9 @@ int main()
     config.fragment_file       = "fragments.csv";
     config.distribution_file   = "distribution.csv";
     config.output_file         = "output.dat";
+
+    // Parse the command line
+    parseCommandLine(argv);
 
     try
     {
@@ -104,6 +114,36 @@ static void throwRuntime(const char* fmt, ...)
     throw runtime_error(buffer);
 }
 //=================================================================================================
+
+//=================================================================================================
+// parseCommandLine() - Parse the command line parameters into the -cmdLine structure
+//=================================================================================================
+void parseCommandLine(const char** argv)
+{
+    int i=0;
+
+    // Loop through each command line parameter
+    while (argv[++i])
+    {
+        // Fetch this parameter
+        string token = argv[i];
+
+        if (token == "-trace")
+        {
+            cmdLine.trace = true;
+            if (argv[i+1])
+            {
+                cmdLine.cellNumber = atoi(argv[++i]);                
+            }
+            continue;
+        }
+
+        printf("Illegal command line parameter '%s'\n", token.c_str());
+        exit(1);
+    }
+}
+//=================================================================================================
+
 
 
 
