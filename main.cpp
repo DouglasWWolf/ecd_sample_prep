@@ -26,7 +26,7 @@ uint32_t findLongestSequence();
 uint32_t verifyDistributionIsValid();
 void     writeOutputFile(uint32_t frameGroupCount);
 void     parseCommandLine(const char** argv);
-void     trace();
+void     trace(uint32_t cellNumber);
 
 // Define a convenient type to encapsulate a vector of strings
 typedef vector<string> strvec_t;
@@ -159,7 +159,7 @@ void execute()
     // If we're supposed to trace a single cell, make it so
     if (cmdLine.trace)
     {
-        trace();
+        trace(cmdLine.cellNumber);
         exit(0);
     }
 
@@ -562,7 +562,7 @@ void writeOutputFile(uint32_t frameGroupCount)
 //=================================================================================================
 // trace() - Displays the value of a single cell for every frame in the output file
 //=================================================================================================
-void trace()
+void trace(uint32_t cellNumber)
 {
     bool first = true;
 
@@ -587,7 +587,7 @@ void trace()
         first = false;
         
         // And display the value of the cell number that was specified on the command line
-        printf("%d", frame[cmdLine.cellNumber]);
+        printf("%d", frame[cellNumber]);
     }
     
     // Terminate the line of text in the output
