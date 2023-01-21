@@ -26,6 +26,7 @@ uint32_t findLongestSequence();
 uint32_t verifyDistributionIsValid();
 void     writeOutputFile(uint32_t frameGroupCount);
 void     parseCommandLine(const char** argv);
+void     trace();
 
 // Define a convenient type to encapsulate a vector of strings
 typedef vector<string> strvec_t;
@@ -154,6 +155,13 @@ void execute()
 {
     // Ensure that comma-separators get printed for numbers
     setlocale(LC_ALL, "");
+
+    // If we're supposed to trace a single cell, make it so
+    if (cmdLine.trace)
+    {
+        trace();
+        exit(0);
+    }
 
     // Load the fragment definitions
     loadFragments();
@@ -547,5 +555,42 @@ void writeOutputFile(uint32_t frameGroupCount)
 
     // We're done with the output file
     fclose(ofile);
+}
+//=================================================================================================
+
+
+//=================================================================================================
+// trace() - Displays the value of a single cell for every frame in the output file
+//=================================================================================================
+void trace()
+{
+    bool first = true;
+
+    // Fetch the name of the file we're going to open
+    const char* filename = config.output_file.c_str();
+
+    // Open the file we're going to read, and complain if we can't
+    FILE* ifile = fopen(filename, "r");
+    if (ifile == nullptr) throwRuntime("Can't create %s", filename);
+
+    // Allocate sufficient RAM to contain an entire data frame
+    unique_ptr<uint8_t> framePtr(new uint8_t[config.cells_per_frame]);
+
+    // Get a pointer to the frame data
+    uint8_t* frame = framePtr.get();
+
+    // Loop through each frame of the file...
+    while (fread(frame, 1, config.cells_per_frame, ifile) == config.cells_per_frame)
+    {
+        // If this isn't the first value we've output, print a comma separator
+        if (!first) printf(", ");
+        first = false;
+        
+        // And display the value of the cell number that was specified on the command line
+        printf("%d", frame[cmdLine.cellNumber]);
+    }
+    
+    // Terminate the line of text in the output
+    printf("\n");
 }
 //=================================================================================================
