@@ -56,7 +56,7 @@ struct cmdline_t
 //=================================================================================================
 struct config_t
 {
-    int      cells_per_frame;
+    uint32_t cells_per_frame;
     uint64_t contig_size;
     uint8_t  diagnostic_constant;
     uint32_t diagnostic_frames;
