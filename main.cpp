@@ -12,6 +12,7 @@
 #include <cstdarg>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <map>
 #include <vector>
 #include <fstream>
@@ -22,7 +23,8 @@ void     execute();
 void     loadFragments();
 void     loadDistribution();
 uint32_t findLongestSequence();
-void     verifyDistributionIsValid();
+uint32_t verifyDistributionIsValid();
+void     writeOutputFile(uint32_t frameGroupCount);
 
 // Define a convenient type to encapsulate a vector of strings
 typedef vector<string> strvec_t;
@@ -31,33 +33,48 @@ typedef vector<string> strvec_t;
 map<string, vector<int>> fragment;
 
 // This list defines each fragment distribution in the distribution definitions file
-struct distribution_t {int first, last, step; strvec_t fragments;};
+struct distribution_t
+{
+    int             first, last, step;
+    vector<uint8_t> cellValue;
+};
 vector<distribution_t> distributionList;
 
-// Defines the sequence of fragments in each cell
-strvec_t* distribution;
 
+//=================================================================================================
 // Variable names in this structure should exactly match the configuration file
+//=================================================================================================
 struct config_t
 {
     int      cells_per_frame;
     uint64_t contig_size;
+    uint8_t  diagnostic_constant;
     uint32_t diagnostic_frames;
     uint32_t data_frames;
+    uint8_t  quiescent;
     string   fragment_file;
     string   distribution_file;
+    string   output_file;
 
 } config;
+//=================================================================================================
 
+
+
+//=================================================================================================
+// main() - Execution starts here.
+//=================================================================================================
 int main()
 {
-
-    config.cells_per_frame   = 1024;
-    config.contig_size       = 1024 * 5;
-    config.diagnostic_frames = 12;
-    config.data_frames       = 4525;
-    config.fragment_file     = "fragments.csv";
-    config.distribution_file = "distribution.csv";
+    config.cells_per_frame     = 16;
+    config.contig_size         = config.cells_per_frame * 1000;
+    config.diagnostic_frames   = 3;
+    config.diagnostic_constant = 255;
+    config.data_frames         = 13;
+    config.quiescent           = 170;
+    config.fragment_file       = "fragments.csv";
+    config.distribution_file   = "distribution.csv";
+    config.output_file         = "output.dat";
 
     try
     {
@@ -69,6 +86,7 @@ int main()
     }
 
 }
+//=================================================================================================
 
 
 
@@ -97,11 +115,17 @@ void execute()
     // Ensure that comma-separators get printed for numbers
     setlocale(LC_ALL, "");
 
+    // Load the fragment definitions
     loadFragments();
 
+    // Load the fragment sequence distribution definitions
     loadDistribution();
 
-    verifyDistributionIsValid();
+    // Find out how many frame groups we need to write to the output file
+    uint32_t frameGroupCount = verifyDistributionIsValid();
+
+    // Write the output file
+    writeOutputFile(frameGroupCount);
 }
 //=================================================================================================
 
@@ -127,10 +151,10 @@ bool getNextCommaSeparatedToken(const char*& p, char* token)
     while (*p == 32 || *p == 9) ++p;
 
     // If we've hit the end of the input line, tell the caller
-    if (*p == 0 || *p == 13) return false;
+    if (*p == 0 || *p == 10 || *p == 13) return false;
 
     // Extract the token into the buffer
-    while (!(*p == 32 || *p == 9 || *p == 13 || *p == 0 || *p == ',')) *token++ = *p++;
+    while (!(*p == 32 || *p == 9 || *p == 10 || *p == 13 || *p == 0 || *p == ',')) *token++ = *p++;
 
     // Nul-terminate the extracted token
     *token = 0;
@@ -198,7 +222,7 @@ void loadFragments()
         while (*p == 32 || *p == 9) ++p;
 
         // If the line is blank, skip it
-        if (*p == 0 || *p == 13) continue;
+        if (*p == 0 || *p == 10 || *p == 13) continue;
 
         // Any line starting with '#' is a comment
         if (*p == '#') continue;
@@ -228,6 +252,25 @@ void loadFragments()
 //=================================================================================================
 
 
+
+
+//=================================================================================================
+// dumpDistributionList() - Displays the distribution list for debugging purposes
+//=================================================================================================
+void dumpDistributionList()
+{
+    for (auto& r : distributionList)
+    {
+        printf("%i : %i : %i  *** ", r.first, r.last, r.step);
+        for (auto i : r.cellValue) printf("%d  ", i);
+        printf("\n");
+
+    }
+}
+//=================================================================================================
+
+
+
 //=================================================================================================
 // loadDistribution() - Loads the fragment distribution definitions into RAM
 //
@@ -238,7 +281,10 @@ void loadDistribution()
     char fragmentName[1000];
     distribution_t distRecord;
     string line;
- 
+
+    // Get a handy reference to the vector of cell values in a distribution record
+    auto& drcv = distRecord.cellValue;
+
     // Fetch the filename of the fragment distribiution definiton file
     const char* filename = config.distribution_file.c_str();
 
@@ -258,7 +304,7 @@ void loadDistribution()
         while (*p == 32 || *p == 9) ++p;
 
         // If the line is blank, skip it
-        if (*p == 0 || *p == 13) continue;
+        if (*p == 0 || *p == 10 || *p == 13) continue;
 
         // Any line starting with '#' is a comment
         if (*p == '#') continue;
@@ -296,41 +342,30 @@ void loadDistribution()
         // If no 'step' is specified, we're defining every cell from 'first' to 'last'
         if (distRecord.step == 0) distRecord.step = 1;
 
-        // Clear the vector that will hold fragement names
-        distRecord.fragments.clear();
+        // Clear the vector that will hold fragment data values
+        drcv.clear();
 
         // Point to the comma separated fragement ids that come after the '$' delimeter
         p = delimeter;
 
-        // Fetch every integer value after the name
+        // Loop through every fragment name in the comma separated list...
         while (getNextCommaSeparatedToken(p, fragmentName))
         {
+            // If we don't recognize this fragment name, complain
             if (fragment.find(fragmentName) == fragment.end())
             {
                 throwRuntime("Undefined fragment name '%s'", fragmentName);
             }
 
-            distRecord.fragments.push_back(fragmentName);
+            // Get a reference to the cell values for this fragment
+            auto& fragcv = fragment[fragmentName];
+
+            // Append the cell values for this fragment to the distribution record
+            drcv.insert(drcv.end(), fragcv.begin(), fragcv.end());
         }
 
         // And add this distribution record to the distribution list
         distributionList.push_back(distRecord);
-    }
-}
-//=================================================================================================
-
-
-//=================================================================================================
-// dumpDistributionList() - Displays the distribution list for debugging purposes
-//=================================================================================================
-void dumpDistributionList()
-{
-    for (auto& r : distributionList)
-    {
-        printf("%i : %i : %i   ", r.first, r.last, r.step);
-        for (auto& f : r.fragments) printf(">%s<  ", f.c_str());
-        printf("\n");
-
     }
 }
 //=================================================================================================
@@ -344,21 +379,13 @@ uint32_t findLongestSequence()
 {
     uint32_t longestLength = 0;
 
-    // Loop through every record in the distribution list
+    // Loop through every record in the distribution list and keep
+    // track of the length of the longest sequence of fragments we find    
     for (auto& distRec : distributionList)
     {
-        // We're going to compute the length of this sequence of fragments
-        uint32_t thisLength = 0;
-
-        // Sum up the aggregate length of the fragments in this sequence
-        for (auto& fragName : distRec.fragments)
-        {
-            thisLength += fragment[fragName].size();
-        }
-
         // Keep track of the length of the longest sequence of fragments we find
-        if (thisLength > longestLength) longestLength = thisLength;
-    }
+        if (distRec.cellValue.size() > longestLength) longestLength = distRec.cellValue.size();
+    };
 
     // Hand the caller the length of the longest sequence of fragments
     return longestLength;
@@ -366,7 +393,13 @@ uint32_t findLongestSequence()
 //=================================================================================================
 
 
-void verifyDistributionIsValid()
+//=================================================================================================
+// verifyDistributionIsValid() - Checks to make sure that number of frame groups implied by the
+//                               longest fragement sequence will fit into the contiguous buffer.
+//
+// Returns: The number of frame groups that will be written to the output file
+//=================================================================================================
+uint32_t verifyDistributionIsValid()
 {
     // What's the maximum number of frames that will fit into the contig buffer?
     uint32_t maxFrames = config.contig_size / config.cells_per_frame;
@@ -386,6 +419,7 @@ void verifyDistributionIsValid()
     // How many bytes will that number of frames occupy in the contiguous buffer?
     uint64_t totalContigReqd = (uint64_t)totalReqdFrames * (uint64_t)config.cells_per_frame;
 
+    // Tell the user basic statistics about this run
     printf("%'16u Frames in the longest fragment sequence\n", longestSequence);
     printf("%'16u Frames in a frame group\n", frameGroupLength);
     printf("%'16u Frame group(s) required\n", frameGroupCount);
@@ -400,4 +434,78 @@ void verifyDistributionIsValid()
         printf("\nThe specified fragment distribution won't fit into the contiguous buffer!\n");
         exit(1);
     }
+
+    // Tell the caller how many frame groups we're going to output
+    return frameGroupCount;
 }
+//=================================================================================================
+
+
+//=================================================================================================
+// buildDataFrame() - Uses the fragment-sequence distribution list to create a data frame
+//=================================================================================================
+void buildDataFrame(uint8_t* frame, uint32_t frameNumber)
+{
+    // Every cell in the frame starts out quiescient
+    memset(frame, config.quiescent, config.cells_per_frame);
+
+    // Loop through every distribution record in the distribution list
+    for (auto& dr : distributionList)
+    {
+        // If this fragment sequence contains a value for this frame number...
+        if (frameNumber < dr.cellValue.size())
+        {
+            // Populate the appropriate cells with the data value for this frame
+            for (uint32_t cellNumber = dr.first-1; cellNumber < dr.last; cellNumber += dr.step)
+            {
+                frame[cellNumber] = dr.cellValue[frameNumber];
+            }
+        }
+    }
+}
+//=================================================================================================
+
+//=================================================================================================
+// writeOutputFile() - Creates the output file
+//=================================================================================================
+void writeOutputFile(uint32_t frameGroupCount)
+{
+    uint32_t i, frameNumber = 0;
+
+    // Fetch the name of the file we're going to create
+    const char* filename = config.output_file.c_str();
+   
+    // Open the file we're going to write, and complain if we can't
+    FILE* ofile = fopen(filename, "w");
+    if (ofile == nullptr) throwRuntime("Can't create %s", filename);
+
+    // Allocate sufficient RAM to contain an entire data frame
+    unique_ptr<uint8_t> framePtr(new uint8_t[config.cells_per_frame]);
+
+    // Get a pointer to the frame data
+    uint8_t* frame = framePtr.get();
+
+    // Loop through each frame group
+    for (int32_t frameGroup = 0; frameGroup < frameGroupCount; ++frameGroup)
+    {
+        // Build the diagnostic frame
+        memset(frame, config.diagnostic_constant, config.cells_per_frame);
+
+        // Write the correct number of diagnostic frames to the output file
+        for (i=0; i<config.diagnostic_frames; ++i)
+        {
+            fwrite(frame, 1, config.cells_per_frame, ofile);
+        }
+
+        // Write the correct number of data frames to the output file
+        for (i=0; i<config.data_frames; ++i)
+        {
+            buildDataFrame(frame, frameNumber++);
+            fwrite(frame, 1, config.cells_per_frame, ofile);
+        }
+    }
+
+    // We're done with the output file
+    fclose(ofile);
+}
+//=================================================================================================
