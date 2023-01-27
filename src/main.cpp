@@ -27,7 +27,7 @@
 #include "config_file.h"
 
 using namespace std;
-
+ 
 void     execute(const char** argv);
 void     loadFragments();
 void     loadDistribution();
