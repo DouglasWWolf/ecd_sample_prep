@@ -560,6 +560,7 @@ void buildDataFrame(uint8_t* frame, uint32_t frameNumber)
 }
 //=================================================================================================
 
+
 //=================================================================================================
 // writeOutputFile() - Creates the output file
 //=================================================================================================
@@ -622,11 +623,48 @@ void writeOutputFile(uint32_t frameGroupCount)
 
 
 //=================================================================================================
+// findLvdsCellOffset() - For a given cell offset within a row, determine the offset of that 
+//                        cell in a row that has been re-ordered to accomodate LVDS
+//=================================================================================================
+int findLvdsCellOffset(int rawCellOffset)
+{
+    for (int i=0; i<ROW_SIZE; ++i)
+    {
+        if (lvdsTranslationTable[i] == rawCellOffset) return i;
+    }
+
+    // If we can't find that cell offset in our translation table, that's a bug!
+    throwRuntime("BUG: findLvdsCellOffset with invalid cell offset %i", rawCellOffset);
+
+    // This is just here to keep to keep the compiler happy
+    return 0;
+}
+//=================================================================================================
+
+
+//=================================================================================================
 // trace() - Displays the value of a single cell for every frame in the output file
 //=================================================================================================
 void trace(uint32_t cellNumber)
 {
     bool first = true;
+
+    // Unless the user said "-nolvds" on the command line, we need to translate the 
+    // cell number to account for LVDS re-ordering
+    if (!cmdLine.nolvds)
+    {
+        // Which row number is this cell in?
+        int row = cellNumber / ROW_SIZE;
+        
+        // What's the cell offset within the row?
+        int rawCellOffset = cellNumber % ROW_SIZE;
+
+        // Determine the offset of that cell in a row that has been LVDS re-ordered
+        int lvdsCellOffset = findLvdsCellOffset(rawCellOffset);
+
+        // And compute the cellNumber of our cell in a frame that has been LVDS re-ordered
+        cellNumber = row * ROW_SIZE + lvdsCellOffset;
+    }
 
     // Fetch the name of the file we're going to open
     const char* filename = config.output_file.c_str();
