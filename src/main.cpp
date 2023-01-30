@@ -7,6 +7,8 @@
 //
 //   -config <filename>    : specifies the name of a configuration file
 //
+//   -nolvds               : don't perform intra-row cell reordering 
+//
 //   -trace <cell_number>  : instead of creating an output file, traces a cell in an existing 
 //                           file.
 //                        
@@ -37,6 +39,8 @@ void     writeOutputFile(uint32_t frameGroupCount);
 void     parseCommandLine(const char** argv);
 void     trace(uint32_t cellNumber);
 void     readConfigurationFile(string filename);
+void     createLvdsTranslationTable();
+void     translateRawToLvds(uint8_t* rawFrame, uint8_t* lvdsFrame);
 
 // Define a convenient type to encapsulate a vector of strings
 typedef vector<string> strvec_t;
@@ -52,6 +56,12 @@ struct distribution_t
 };
 vector<distribution_t> distributionList;
 
+// This is the number of cells in a single data row on the chip
+const int ROW_SIZE = 2048;
+
+// This translates cell positions within a row so that they are suitable for LVDS
+int lvdsTranslationTable[ROW_SIZE];
+
 //=================================================================================================
 // Command line options
 //=================================================================================================
@@ -60,7 +70,7 @@ struct cmdline_t
     bool     trace;
     uint32_t cellNumber;
     string   config;
-
+    bool     nolvds;
 } cmdLine;
 //=================================================================================================
 
@@ -153,6 +163,13 @@ void parseCommandLine(const char** argv)
             continue;
         }
 
+        // Handle the "-nolvds" command line switch
+        if (token == "-nolvds")
+        {
+            cmdLine.nolvds = true;
+            continue;
+        }
+
         printf("Illegal command line parameter '%s'\n", token.c_str());
         exit(1);
     }
@@ -175,6 +192,10 @@ void execute(const char** argv)
 
     // Fetch the configuration values from the file and populate the global "config" structure
     readConfigurationFile(cmdLine.config);
+
+    // Create the translation table that re-orders cell data within all rows of a frame so that
+    // it's in the proper order for LVDS transmission from the ECD to the FPGA
+    createLvdsTranslationTable();
 
     // If we're supposed to trace a single cell, make it so
     if (cmdLine.trace)
@@ -468,6 +489,13 @@ uint32_t findLongestSequence()
 //=================================================================================================
 uint32_t verifyDistributionIsValid()
 {
+    // Ensure that the number of cells in a single frame is a multiple of the row size
+    if (config.cells_per_frame % ROW_SIZE != 0)
+    {
+        printf("\nConfig value 'cells_per_frame' must a multiple of %i\n", ROW_SIZE);
+        exit(1);        
+    }
+
     // What's the maximum number of frames that will fit into the contig buffer?
     uint32_t maxFrames = config.contig_size / config.cells_per_frame;
 
@@ -546,29 +574,44 @@ void writeOutputFile(uint32_t frameGroupCount)
     FILE* ofile = fopen(filename, "w");
     if (ofile == nullptr) throwRuntime("Can't create %s", filename);
 
-    // Allocate sufficient RAM to contain an entire data frame
-    unique_ptr<uint8_t> framePtr(new uint8_t[config.cells_per_frame]);
+    // Allocate sufficient RAM to contain an entire raw data frame
+    unique_ptr<uint8_t> rawFramePtr(new uint8_t[config.cells_per_frame]);
 
-    // Get a pointer to the frame data
-    uint8_t* frame = framePtr.get();
+    // Allocate sufficient RAM to contain an entire LVDS-reordered data frame
+    unique_ptr<uint8_t> lvdsFramePtr(new uint8_t[config.cells_per_frame]);
+
+    // Get a pointers to the raw frame and LVDS-order frame
+    uint8_t* rawFrame  = rawFramePtr.get();
+    uint8_t* lvdsFrame = lvdsFramePtr.get();
 
     // Loop through each frame group
     for (int32_t frameGroup = 0; frameGroup < frameGroupCount; ++frameGroup)
     {
         // Build the diagnostic frame
-        memset(frame, config.diagnostic_constant, config.cells_per_frame);
+        memset(rawFrame, config.diagnostic_constant, config.cells_per_frame);
 
         // Write the correct number of diagnostic frames to the output file
         for (i=0; i<config.diagnostic_frames; ++i)
         {
-            fwrite(frame, 1, config.cells_per_frame, ofile);
+            fwrite(rawFrame, 1, config.cells_per_frame, ofile);
         }
 
-        // Write the correct number of data frames to the output file
+        // For each data frame in this frame group...
         for (i=0; i<config.data_frames; ++i)
         {
-            buildDataFrame(frame, frameNumber++);
-            fwrite(frame, 1, config.cells_per_frame, ofile);
+            // Build the raw data frame for this frame number
+            buildDataFrame(rawFrame, frameNumber++);
+            
+            // If the user said "-nolvds", the LVDS frame is the same as the raw frame
+            if (cmdLine.nolvds)
+                memcpy(lvdsFrame, rawFrame, config.cells_per_frame);
+
+            // Otherwise, translate the raw frame into an lvds frame
+            else
+                translateRawToLvds(rawFrame, lvdsFrame);
+            
+            // And write the resulting frame to the output file
+            fwrite(lvdsFrame, 1, config.cells_per_frame, ofile);
         }
     }
 
@@ -642,5 +685,57 @@ void readConfigurationFile(string filename)
     cf.get("fragment_file",       &config.fragment_file      );
     cf.get("distribution_file",   &config.distribution_file  );
     cf.get("output_file",         &config.output_file        );
+}
+//=================================================================================================
+
+
+//=================================================================================================
+// createLvdsTranslationTable() - Creates the translation table that re-arranges a row of data
+//                                so that it's in suitable order for transmission over ECD LVDS
+//=================================================================================================
+void createLvdsTranslationTable()
+{
+    // Each row of a frame consists of 2048 bytes divided into 8 groups
+    for (int group = 0; group <8; ++group)
+    {
+        int groupOffset = group * 256 + 63;
+
+        // Each group consists of four rows
+        for (int row=0; row < 4; ++row)
+        {
+            int rowOffset = groupOffset + (row * 64);
+            int cellValue = row * 512 + group;
+
+            // Each row consists of 64 cells
+            for (int i=0; i<64; ++i)
+            {
+                lvdsTranslationTable[rowOffset - i] = cellValue;
+                cellValue = cellValue + 8;
+            }
+        }        
+    }
+}
+//=================================================================================================
+
+
+//=================================================================================================
+// translateRawToLvds() - Translates a frame of data into the order in which the ECD's LVDS logic
+//                        needs to transmit it to the FPGA
+//=================================================================================================
+void translateRawToLvds(uint8_t* rawFrame, uint8_t* lvdsFrame)
+{
+    // How many rows are in a frame of data?
+    int rowsPerFrame = config.cells_per_frame / ROW_SIZE;
+
+    // Loop through each row of data in the frame...
+    for (int row=0; row<rowsPerFrame; ++row)
+    {
+        // Create a pointer to this row in both the raw frame and the LVDS frame
+        uint8_t* rawRow  = rawFrame  + ROW_SIZE * row;
+        uint8_t* lvdsRow = lvdsFrame + ROW_SIZE * row;
+
+        // Translate this row of data from raw order to LVDS order
+        for (int i=0; i<ROW_SIZE; ++i) lvdsRow[i] = rawRow[lvdsTranslationTable[i]];
+    }
 }
 //=================================================================================================
