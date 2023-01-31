@@ -824,7 +824,8 @@ void printLvdsMap()
     {
         for (int col=0; col<64; ++col)
         {
-            printf("%4d,", lvdsTranslationTable[i++]);
+            printf("%4d", lvdsTranslationTable[i++]);
+            if (col != 63) printf(",");
         }   
         printf("\n");     
     }
