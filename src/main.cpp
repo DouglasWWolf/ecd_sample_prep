@@ -594,38 +594,34 @@ void writeOutputFile(uint32_t frameGroupCount)
     if (ofile == nullptr) throwRuntime("Can't create %s", filename);
 
     // Allocate sufficient RAM to contain an entire raw data frame
-    unique_ptr<uint8_t> rawFramePtr(new uint8_t[config.cells_per_frame]);
+    unique_ptr<uint8_t> framePtr(new uint8_t[config.cells_per_frame]);
 
-    // Allocate sufficient RAM to contain an entire LVDS-reordered data frame
-    unique_ptr<uint8_t> lvdsFramePtr(new uint8_t[config.cells_per_frame]);
-
-    // Get a pointers to the raw frame and LVDS-order frame
-    uint8_t* rawFrame  = rawFramePtr.get();
-    uint8_t* lvdsFrame = lvdsFramePtr.get();
+    // Get a pointer to the frame data
+    uint8_t* frame  = framePtr.get();
 
     // Loop through each frame group
     for (int32_t frameGroup = 0; frameGroup < frameGroupCount; ++frameGroup)
     {
         // Build the diagnostic frame
-        memset(rawFrame, config.diagnostic_constant, config.cells_per_frame);
+        memset(frame, config.diagnostic_constant, config.cells_per_frame);
 
         // Write the correct number of diagnostic frames to the output file
         for (i=0; i<config.diagnostic_frames; ++i)
         {
-            fwrite(rawFrame, 1, config.cells_per_frame, ofile);
+            fwrite(frame, 1, config.cells_per_frame, ofile);
         }
 
         // For each data frame in this frame group...
         for (i=0; i<config.data_frames; ++i)
         {
             // Build the raw data frame for this frame number
-            buildDataFrame(rawFrame, frameNumber++);
+            buildDataFrame(frame, frameNumber++);
             
             // If the user said "-nolvds", the LVDS frame is the same as the raw frame
-            if (!cmdLine.nolvds) reorderForLvds(rawFrame);
+            if (!cmdLine.nolvds) reorderForLvds(frame);
 
             // And write the resulting frame to the output file
-            fwrite(lvdsFrame, 1, config.cells_per_frame, ofile);
+            fwrite(frame, 1, config.cells_per_frame, ofile);
         }
     }
 
