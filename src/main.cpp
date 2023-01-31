@@ -9,6 +9,8 @@
 //
 //   -nolvds               : don't perform intra-row cell reordering 
 //
+//   -lvdsmap              : display the lvds reording map, then exit
+//
 //   -trace <cell_number>  : instead of creating an output file, traces a cell in an existing 
 //                           file.
 //                        
@@ -40,7 +42,8 @@ void     parseCommandLine(const char** argv);
 void     trace(uint32_t cellNumber);
 void     readConfigurationFile(string filename);
 void     createLvdsTranslationTable();
-void     translateRawToLvds(uint8_t* rawFrame, uint8_t* lvdsFrame);
+void     reorderForLvds(uint8_t* frame);
+void     printLvdsMap();
 
 // Define a convenient type to encapsulate a vector of strings
 typedef vector<string> strvec_t;
@@ -71,6 +74,7 @@ struct cmdline_t
     uint32_t cellNumber;
     string   config;
     bool     nolvds;
+    bool     lvdsmap;
 } cmdLine;
 //=================================================================================================
 
@@ -170,6 +174,13 @@ void parseCommandLine(const char** argv)
             continue;
         }
 
+        // Handle the "-lvdsmap" command line switch
+        if (token == "-lvdsmap")
+        {
+            cmdLine.lvdsmap = true;
+            continue;
+        }
+
         printf("Illegal command line parameter '%s'\n", token.c_str());
         exit(1);
     }
@@ -196,6 +207,13 @@ void execute(const char** argv)
     // Create the translation table that re-orders cell data within all rows of a frame so that
     // it's in the proper order for LVDS transmission from the ECD to the FPGA
     createLvdsTranslationTable();
+
+    // If the user wants to display the LVDS re-ordering map, make it so
+    if (cmdLine.lvdsmap)
+    {
+        printLvdsMap();
+        exit(0);
+    }
 
     // If we're supposed to trace a single cell, make it so
     if (cmdLine.trace)
@@ -604,13 +622,8 @@ void writeOutputFile(uint32_t frameGroupCount)
             buildDataFrame(rawFrame, frameNumber++);
             
             // If the user said "-nolvds", the LVDS frame is the same as the raw frame
-            if (cmdLine.nolvds)
-                memcpy(lvdsFrame, rawFrame, config.cells_per_frame);
+            if (!cmdLine.nolvds) reorderForLvds(rawFrame);
 
-            // Otherwise, translate the raw frame into an lvds frame
-            else
-                translateRawToLvds(rawFrame, lvdsFrame);
-            
             // And write the resulting frame to the output file
             fwrite(lvdsFrame, 1, config.cells_per_frame, ofile);
         }
@@ -733,18 +746,18 @@ void readConfigurationFile(string filename)
 //=================================================================================================
 void createLvdsTranslationTable()
 {
-    // Each row of a frame consists of 2048 bytes divided into 8 groups
+    // Each row of a frame consists of 2048 cells divided into 8 cell-groups
     for (int group = 0; group <8; ++group)
     {
+        // Determine the offset (within a row) of the first cell in this group
         int groupOffset = group * 256 + 63;
 
-        // Each group consists of four rows
+        // Each group consists of four rows of 64-cells each
         for (int row=0; row < 4; ++row)
         {
             int rowOffset = groupOffset + (row * 64);
             int cellValue = row * 512 + group;
 
-            // Each row consists of 64 cells
             for (int i=0; i<64; ++i)
             {
                 lvdsTranslationTable[rowOffset - i] = cellValue;
@@ -757,23 +770,66 @@ void createLvdsTranslationTable()
 
 
 //=================================================================================================
-// translateRawToLvds() - Translates a frame of data into the order in which the ECD's LVDS logic
-//                        needs to transmit it to the FPGA
+// reorderForLvds() - Translates a frame of data into the order in which the ECD's LVDS logic
+//                    needs to transmit it to the FPGA
+//
+// Think of a row of cell data as existing in a "raw" order (i.e., the order that we think of it
+// logically being in), and an "lvds order", which is the order it has to be in so that the ECD
+// can transmit it to the FPGA over LVDS.
+//
+// The value 'x' at some given index 'i' in the translation table means:
+//    At location 'i' in the lvds-ordered row, you will find the value from location 'x' in the
+//    raw-ordered row.  Stated another way: lvds_order[i] = raw_order[x]
+//
 //=================================================================================================
-void translateRawToLvds(uint8_t* rawFrame, uint8_t* lvdsFrame)
+void reorderForLvds(uint8_t* rawFrame)
 {
+    uint8_t lvdsRow[ROW_SIZE];
+
     // How many rows are in a frame of data?
     int rowsPerFrame = config.cells_per_frame / ROW_SIZE;
 
     // Loop through each row of data in the frame...
     for (int row=0; row<rowsPerFrame; ++row)
     {
-        // Create a pointer to this row in both the raw frame and the LVDS frame
-        uint8_t* rawRow  = rawFrame  + ROW_SIZE * row;
-        uint8_t* lvdsRow = lvdsFrame + ROW_SIZE * row;
-
+        // Create a pointer to this row of data within the frame
+        uint8_t* rawRow  = rawFrame + ROW_SIZE * row;
+    
         // Translate this row of data from raw order to LVDS order
         for (int i=0; i<ROW_SIZE; ++i) lvdsRow[i] = rawRow[lvdsTranslationTable[i]];
+
+        // Copy the lvds-ordered data back into the original frame
+        memcpy(rawRow, lvdsRow, ROW_SIZE);
     }
 }
 //=================================================================================================
+
+
+//=================================================================================================
+// printLvdsMap() - Prints the map that is used to reorder row data for LVDS output
+//
+// Think of a row of cell data as existing in a "raw" order (i.e., the order that we think of it
+// logically being in), and an "lvds order", which is the order it has to be in so that the ECD
+// can transmit it to the FPGA over LVDS.
+//
+// The value 'x' at some given index 'i' in the translation table means:
+//    At location 'i' in the lvds-ordered row, you will find the value from location 'x' in the
+//    raw-ordered row.  Stated another way: lvds_order[i] = raw_order[x]
+//=================================================================================================
+void printLvdsMap()
+{
+    int i=0;
+
+    for (int row=0; row<32; ++row)
+    {
+        for (int col=0; col<64; ++col)
+        {
+            printf("%4d,", lvdsTranslationTable[i++]);
+        }   
+        printf("\n");     
+    }
+}
+//=================================================================================================
+
+
+
