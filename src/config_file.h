@@ -130,6 +130,7 @@ public:
     // Call these to fetch a vector of values
     // Can throw exception runtime_error
     bool    get(std::string, std::vector<int32_t    > *p_values);
+    bool    get(std::string, std::vector<uint8_t    > *p_values);
     bool    get(std::string, std::vector<double     > *p_values);
     bool    get(std::string, std::vector<std::string> *p_values);
     bool    get(std::string, std::vector<bool       > *p_values);

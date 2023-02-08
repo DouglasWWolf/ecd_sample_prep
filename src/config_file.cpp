@@ -584,6 +584,37 @@ bool CConfigFile::get(string key, vector<int32_t> *p_result)
     return true;
 }
 
+
+bool CConfigFile::get(string key, vector<uint8_t> *p_result)
+{
+    uint8_t     value;
+    strvec_t    values;
+
+    // Clear the caller's result vector
+    p_result->clear();
+
+    // Fetch the values assocated with this key
+    if (!lookup(key, &values)) return false;
+
+    // For each string value that is associated with this key...
+    for (int i=0; i<values.size(); ++i)
+    {
+        // Get a handy reference to this entry
+        string& s = values[i];
+
+        // Decode the string into a native value
+        decode(s, &value);
+
+        // Add append that value to the caller's result vector
+        p_result->push_back(value);
+    }
+
+    // Tell the caller that all is well
+    return true;
+}
+
+
+
 bool CConfigFile::get(string key, vector<string> *p_result)
 {
     string      value;

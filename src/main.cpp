@@ -84,15 +84,14 @@ struct cmdline_t
 //=================================================================================================
 struct config_t
 {
-    uint32_t cells_per_frame;
-    uint64_t contig_size;
-    uint8_t  diagnostic_constant;
-    uint32_t diagnostic_frames;
-    uint32_t data_frames;
-    uint8_t  quiescent;
-    string   fragment_file;
-    string   distribution_file;
-    string   output_file;
+    uint32_t         cells_per_frame;
+    uint64_t         contig_size;
+    vector<uint8_t>  diagnostic_values;
+    uint32_t         data_frames;
+    uint8_t          quiescent;
+    string           fragment_file;
+    string           distribution_file;
+    string           output_file;
 
 } config;
 //=================================================================================================
@@ -507,6 +506,9 @@ uint32_t findLongestSequence()
 //=================================================================================================
 uint32_t verifyDistributionIsValid()
 {
+    // How many diagnostic frames are there?
+    uint32_t diagnosticFrames = config.diagnostic_values.size();
+
     // Ensure that the number of cells in a single frame is a multiple of the row size
     if (config.cells_per_frame % ROW_SIZE != 0)
     {
@@ -521,7 +523,7 @@ uint32_t verifyDistributionIsValid()
     uint32_t longestSequence = findLongestSequence();
 
     // A "frame group" is a set of diagnostic frames followed by a set of data frames.
-    uint32_t frameGroupLength = config.diagnostic_frames + config.data_frames;
+    uint32_t frameGroupLength = diagnosticFrames + config.data_frames;
 
     // How many frames groups are required to express our longest sequence?
     uint32_t frameGroupCount = longestSequence / config.data_frames + 1;
@@ -586,6 +588,9 @@ void writeOutputFile(uint32_t frameGroupCount)
 {
     uint32_t i, frameNumber = 0;
 
+    // How many diagnostic frames are there?
+    uint32_t diagnosticFrames = config.diagnostic_values.size();
+
     // Fetch the name of the file we're going to create
     const char* filename = config.output_file.c_str();
    
@@ -602,12 +607,11 @@ void writeOutputFile(uint32_t frameGroupCount)
     // Loop through each frame group
     for (int32_t frameGroup = 0; frameGroup < frameGroupCount; ++frameGroup)
     {
-        // Build the diagnostic frame
-        memset(frame, config.diagnostic_constant, config.cells_per_frame);
 
         // Write the correct number of diagnostic frames to the output file
-        for (i=0; i<config.diagnostic_frames; ++i)
+        for (i=0; i<diagnosticFrames; ++i)
         {
+            memset(frame, config.diagnostic_values[i], config.cells_per_frame);
             fwrite(frame, 1, config.cells_per_frame, ofile);
         }
 
@@ -725,9 +729,8 @@ void readConfigurationFile(string filename)
     // Fetch each configuration
     cf.get("cells_per_frame",     &config.cells_per_frame    );
     cf.get("contig_size",         &config.contig_size        );
-    cf.get("diagnostic_frames",   &config.diagnostic_frames  );
     cf.get("data_frames",         &config.data_frames        );
-    cf.get("diagnostic_constant", &config.diagnostic_constant);
+    cf.get("diagnostic_values",   &config.diagnostic_values  );
     cf.get("quiescent",           &config.quiescent          );
     cf.get("fragment_file",       &config.fragment_file      );
     cf.get("distribution_file",   &config.distribution_file  );
